@@ -515,14 +515,14 @@ make run
 **Full expected interaction:**
 
 ```
-╔═════════════════════════════════════════╗
-║       Cryptarithmetic Solver            ║
-╠═════════════════════════════════════════╣
-║  · Each word <= 8 letters               ║
-║  · Each letter -> unique digit 0-9      ║
-║  · Operators: + - * / x =               ║
-║  · Long-mul: W1*W2 = P0+P1+...= PROD    ║
-╚═════════════════════════════════════════╝
++-----------------------------------------+
+|         Cryptarithmetic Solver          |
++-----------------------------------------+
+|  · Each word ≤ %d letters
+|  · Each letter → unique digit 0–9       |
+|  · Operators: + - * / x =               |
+|  · Long-mul: W1*W2 = P0+P1+...= PROD    |
++-----------------------------------------+
 
   Examples:
     SEND + MORE = MONEY
@@ -530,31 +530,32 @@ make run
   Equation: ABC * DE = FEC + DEC = HGBC
 
   Input   : "ABC * DE = FEC + DEC = HGBC"
-  Letters : A B C D E F G H (8 unique)
+  Letters : A B C D E F H G (8 unique)
   Mode    : Long-multiplication CSP
   Multiplicand : ABC
   Multiplier   : DE  (2 digits)
-  Partial[0]   : FEC  (ABC x digit[0 from right])
-  Partial[1]   : DEC  (ABC x digit[1 from right])
+  Partial[0]   : FEC  (ABC × digit[0 from right])
+  Partial[1]   : DEC  (ABC × digit[1 from right])
   Product      : HGBC
+
 
   Solving...
 
-  Solution [#1]
-                  │ A  ->  … │
-                  │ B  ->  … │
-                  │ C  ->  … │
-                  │ D  ->  … │
-                  │ E  ->  … │
-                  │ F  ->  … │
-                  │ G  ->  … │
-                  │ H  ->  … │
+  Solution [#1]   +---------+
+                  | A  →  1 |
+                  | B  →  2 |
+                  | C  →  5 |
+                  | D  →  3 |
+                  | E  →  7 |
+                  | F  →  8 |
+                  | H  →  4 |
+                  | G  →  6 |
+                  +---------+
 
-  Equation: … × … = … + … = …
-
-╔════════════════════════════════════════════╗
-║  Found:               N  solution(s)       ║
-╚════════════════════════════════════════════╝
+  Equation: 125 × 37 = 875 + 375 = 4625
+  +--------------------------------------------+
+  |  Found:                  1     solution(s) |
+  +--------------------------------------------+
 ```
 
 > **Note**: Actual digit values and solution count are determined at runtime. The program
