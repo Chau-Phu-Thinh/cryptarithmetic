@@ -202,63 +202,58 @@ static long long eval_word(const char *w) {
   return v;
 }
 
-static long long parse_expr(void);
-
-static long long parse_factor(void) {
-  if (S.tokens[S.cur].kind != TK_WORD)
-    ERR("expected a word token.");
-  return eval_word(S.tokens[S.cur++].word);
-}
-
-static long long parse_term(void) {
-  long long lhs = parse_factor();
-  while (S.tokens[S.cur].kind == TK_OP &&
-         (S.tokens[S.cur].op == OP_MUL || S.tokens[S.cur].op == OP_DIV)) {
-    Op op = S.tokens[S.cur++].op;
-    long long rhs = parse_factor();
-    if (op == OP_MUL) {
-      lhs *= rhs;
-    } else {
-      if (rhs == 0 || lhs % rhs != 0)
-        return LLONG_MIN;
-      lhs /= rhs;
-    }
-  }
-  return lhs;
-}
-
-static long long parse_expr(void) {
-  long long lhs = parse_term();
-  while (S.tokens[S.cur].kind == TK_OP &&
-         (S.tokens[S.cur].op == OP_ADD || S.tokens[S.cur].op == OP_SUB)) {
-    Op op = S.tokens[S.cur++].op;
-    long long rhs = parse_term();
-    if (lhs == LLONG_MIN || rhs == LLONG_MIN)
-      return LLONG_MIN;
-    lhs = (op == OP_ADD) ? lhs + rhs : lhs - rhs;
-  }
-  return lhs;
-}
-
 static int evaluate(void) {
+  if (S.ntokens == 0)
+    return 0;
   S.cur = 0;
   long long segs[MAX_SEGMENTS];
   int nsegs = 0;
+
   while (S.tokens[S.cur].kind != TK_END) {
-    long long v = parse_expr();
-    if (v == LLONG_MIN || nsegs >= MAX_SEGMENTS)
+    if (S.tokens[S.cur].kind != TK_WORD)
       return 0;
-    segs[nsegs++] = v;
+    long long current_val = eval_word(S.tokens[S.cur++].word);
+
+    while (S.tokens[S.cur].kind == TK_OP) {
+      Op op = S.tokens[S.cur++].op;
+      if (S.tokens[S.cur].kind != TK_WORD)
+        return 0;
+      long long next_val = eval_word(S.tokens[S.cur++].word);
+
+      switch (op) {
+      case OP_ADD:
+        current_val += next_val;
+        break;
+      case OP_SUB:
+        current_val -= next_val;
+        break;
+      case OP_MUL:
+        current_val *= next_val;
+        break;
+      case OP_DIV:
+        if (next_val == 0 || current_val % next_val != 0)
+          return 0;
+        current_val /= next_val;
+        break;
+      }
+    }
+
+    if (nsegs >= MAX_SEGMENTS)
+      return 0;
+    segs[nsegs++] = current_val;
+
     if (S.tokens[S.cur].kind == TK_EQ)
       S.cur++;
   }
+
+  if (nsegs < 2)
+    return 0;
   for (int i = 1; i < nsegs; i++)
     if (segs[i] != segs[0])
       return 0;
   return 1;
 }
 
-/* ── Printer ───────────────────────────────────────────────────────────── */
 static const char *op_sym[] = {"+", "-", "×", "÷"};
 
 static void print_solution(void) {
@@ -451,8 +446,7 @@ static int evaluate_long_mul(void) {
 }
 
 /* ═══════════════════════════════════════════════════════════════════════
- * Long-multiplication CSP (real column-carry version, not brute force)
- *
+ * Long-multiplication CSP
  * Mirrors the addition column-carry solver, but applied twice:
  *   Pass 1 — for each multiplier digit i (right to left), multiply the
  *            multiplicand column-by-column with carry, checking each
