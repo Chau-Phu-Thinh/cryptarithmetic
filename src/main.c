@@ -450,6 +450,216 @@ static int evaluate_long_mul(void) {
   return (computed_product == product && multiplicand * multiplier == product);
 }
 
+/* ═══════════════════════════════════════════════════════════════════════
+ * Long-multiplication CSP (real column-carry version, not brute force)
+ *
+ * Mirrors the addition column-carry solver, but applied twice:
+ *   Pass 1 — for each multiplier digit i (right to left), multiply the
+ *            multiplicand column-by-column with carry, checking each
+ *            column against the matching digit of partial[i].
+ *   Pass 2 — add the (shifted) partials into PRODUCT, column-by-column
+ *            with carry, exactly like ordinary long addition.
+ *
+ * Only the multiplicand's and multiplier's digits are "free" (enumerated
+ * 0-9 on first appearance). Every partial-product digit and every
+ * product digit is arithmetically FORCED — it is assigned directly and
+ * only checked for availability / leading-zero / consistency, never
+ * enumerated. This is what makes it a real CSP: a wrong forced digit
+ * prunes the branch immediately instead of waiting for a full
+ * permutation to be built and evaluated.
+ * ═══════════════════════════════════════════════════════════════════ */
+
+typedef enum { FA_FAIL, FA_ALREADY, FA_NEW } FAResult;
+
+static int w1_len_g, mlen_g, product_len_g, prod_cols_g;
+static int w1_letter_col[MAX_WORD_LEN];   /* col j -> letter idx    */
+static int mult_letter_pos[MAX_WORD_LEN]; /* pos i -> letter idx    */
+static int part_letter_col[MAX_WORD_LEN][MAX_WORD_LEN + 1];
+static int part_len_g[MAX_WORD_LEN];
+static int prod_letter_col[MAX_WORD_LEN * 2 + 2];
+static int w1_distinct[MAX_LETTERS], w1_ndistinct;
+
+static FAResult try_assign_forced(int li, int value) {
+  int ci = (unsigned char)(S.letters[li] - 'A');
+  if (S.digit[ci] != -1)
+    return (S.digit[ci] == value) ? FA_ALREADY : FA_FAIL;
+  if (value < 0 || value > 9 || S.used[value])
+    return FA_FAIL;
+  if (S.leading[ci] && value == 0)
+    return FA_FAIL;
+  S.digit[ci] = value;
+  S.used[value] = 1;
+  return FA_NEW;
+}
+
+static void undo_forced(int li, int value) {
+  int ci = (unsigned char)(S.letters[li] - 'A');
+  S.digit[ci] = -1;
+  S.used[value] = 0;
+}
+
+static void longmul_setup(void) {
+  w1_len_g = (int)strlen(S.lm_multiplicand);
+  mlen_g = S.lm_npartials;
+  product_len_g = (int)strlen(S.lm_product);
+
+  for (int j = 0; j < w1_len_g; j++)
+    w1_letter_col[j] = letter_index(S.lm_multiplicand[w1_len_g - 1 - j]);
+
+  for (int i = 0; i < mlen_g; i++)
+    mult_letter_pos[i] = letter_index(S.lm_multiplier[mlen_g - 1 - i]);
+
+  int max_relevant = product_len_g - 1;
+  for (int i = 0; i < mlen_g; i++) {
+    int plen = (int)strlen(S.lm_partials[i]);
+    part_len_g[i] = plen;
+    for (int j = 0; j < plen; j++)
+      part_letter_col[i][j] = letter_index(S.lm_partials[i][plen - 1 - j]);
+    if (i + plen - 1 > max_relevant)
+      max_relevant = i + plen - 1;
+  }
+  prod_cols_g = max_relevant + 2; /* +1 real, +1 overflow-must-be-zero */
+
+  for (int k = 0; k < product_len_g; k++)
+    prod_letter_col[k] = letter_index(S.lm_product[product_len_g - 1 - k]);
+
+  int seen[MAX_LETTERS] = {0};
+  w1_ndistinct = 0;
+  for (int j = 0; j < w1_len_g; j++) {
+    int li = w1_letter_col[j];
+    if (!seen[li]) {
+      seen[li] = 1;
+      w1_distinct[w1_ndistinct++] = li;
+    }
+  }
+}
+
+static void longmul_solve_partials(int i);
+
+static void longmul_solve_product(void) {
+  int carry = 0, ok = 1;
+  int forced_li[MAX_WORD_LEN * 2 + 2], forced_val[MAX_WORD_LEN * 2 + 2], nf = 0;
+
+  for (int k = 0; k < prod_cols_g && ok; k++) {
+    long sum = carry;
+    for (int i = 0; i < mlen_g; i++) {
+      int jj = k - i;
+      if (jj >= 0 && jj < part_len_g[i])
+        sum +=
+            S.digit[(unsigned char)(S.letters[part_letter_col[i][jj]] - 'A')];
+    }
+    int digit_needed = sum % 10;
+    carry = sum / 10;
+    int pli = (k < product_len_g) ? prod_letter_col[k] : -1;
+    if (pli >= 0) {
+      FAResult r = try_assign_forced(pli, digit_needed);
+      if (r == FA_FAIL) {
+        ok = 0;
+        break;
+      }
+      if (r == FA_NEW) {
+        forced_li[nf] = pli;
+        forced_val[nf] = digit_needed;
+        nf++;
+      }
+    } else if (digit_needed != 0) {
+      ok = 0;
+    }
+  }
+  if (ok && carry != 0)
+    ok = 0;
+  if (ok)
+    print_solution();
+  for (int t = nf - 1; t >= 0; t--)
+    undo_forced(forced_li[t], forced_val[t]);
+}
+
+static void longmul_do_partial(int i, int mdigit) {
+  int maxcols = part_len_g[i] > w1_len_g ? part_len_g[i] : w1_len_g;
+  int carry = 0, ok = 1;
+  int forced_li[MAX_WORD_LEN + 1], forced_val[MAX_WORD_LEN + 1], nf = 0;
+
+  for (int j = 0; j < maxcols && ok; j++) {
+    int w1_digit =
+        (j < w1_len_g)
+            ? S.digit[(unsigned char)(S.letters[w1_letter_col[j]] - 'A')]
+            : 0;
+    long total = (long)w1_digit * mdigit + carry;
+    int digit_needed = total % 10;
+    carry = total / 10;
+    int pli = (j < part_len_g[i]) ? part_letter_col[i][j] : -1;
+    if (pli >= 0) {
+      FAResult r = try_assign_forced(pli, digit_needed);
+      if (r == FA_FAIL) {
+        ok = 0;
+        break;
+      }
+      if (r == FA_NEW) {
+        forced_li[nf] = pli;
+        forced_val[nf] = digit_needed;
+        nf++;
+      }
+    } else if (digit_needed != 0) {
+      ok = 0;
+    }
+  }
+  if (ok && carry != 0)
+    ok = 0;
+
+  int next_i = i + 1;
+  if (ok) {
+    if (next_i == mlen_g)
+      longmul_solve_product();
+    else
+      longmul_solve_partials(next_i);
+  }
+  for (int t = nf - 1; t >= 0; t--)
+    undo_forced(forced_li[t], forced_val[t]);
+}
+
+static void longmul_solve_partials(int i) {
+  int li = mult_letter_pos[i];
+  int ci = (unsigned char)(S.letters[li] - 'A');
+  if (S.digit[ci] != -1) {
+    longmul_do_partial(i, S.digit[ci]);
+    return;
+  }
+  int is_leading = S.leading[ci];
+  for (int d = 0; d <= 9; d++) {
+    if (S.used[d] || (is_leading && d == 0))
+      continue;
+    S.digit[ci] = d;
+    S.used[d] = 1;
+    longmul_do_partial(i, d);
+    S.digit[ci] = -1;
+    S.used[d] = 0;
+  }
+}
+
+static void longmul_assign_w1(int idx) {
+  if (idx == w1_ndistinct) {
+    longmul_solve_partials(0);
+    return;
+  }
+  int li = w1_distinct[idx];
+  int ci = (unsigned char)(S.letters[li] - 'A');
+  int is_leading = S.leading[ci];
+  for (int d = 0; d <= 9; d++) {
+    if (S.used[d] || (is_leading && d == 0))
+      continue;
+    S.digit[ci] = d;
+    S.used[d] = 1;
+    longmul_assign_w1(idx + 1);
+    S.digit[ci] = -1;
+    S.used[d] = 0;
+  }
+}
+
+static void longmul_csp_solve(void) {
+  longmul_setup();
+  longmul_assign_w1(0);
+}
+
 static void build_columns(void) {
   int maxlen = (int)strlen(S.result);
   for (int a = 0; a < S.nadd; a++) {
@@ -666,9 +876,10 @@ static void brute_force_solve_with(int idx, EvalFn eval_fn) {
   }
 }
 
-static void brute_force_solve(int idx) { brute_force_solve_with(idx, evaluate); }
+static void brute_force_solve(int idx) {
+  brute_force_solve_with(idx, evaluate);
+}
 
-/* ── Main ──────────────────────────────────────────────────────────────── */
 int main(int argc, char *argv[]) {
   char input[MAX_INPUTS];
   int force_bruteforce = 0;
@@ -718,7 +929,6 @@ int main(int argc, char *argv[]) {
     printf("  Mode    : Column-Carry CSP\n");
     build_columns();
 
-    /* Show column layout */
     printf("\n  +------------------------ Column layout ------------"
            "-------------+\n");
     for (int k = 0; k < S.ncols; k++) {
@@ -770,7 +980,7 @@ int main(int argc, char *argv[]) {
   if (S.is_addition)
     carry_solve(0, 0);
   else if (S.is_longmul)
-    brute_force_solve_with(0, evaluate_long_mul);
+    longmul_csp_solve();
   else
     brute_force_solve(0);
 
