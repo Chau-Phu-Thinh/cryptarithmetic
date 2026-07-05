@@ -2,3 +2,4 @@ main
 .agents
 .obsidian
 *.o
+bin/
