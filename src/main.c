@@ -18,7 +18,7 @@
  *      Propagate carry_out = (sum + carry_in) / 10.
  *
  * 2. Long-Multiplication CSP
- *      Detects:  W1 * W2 = P1 + P2 + ... + Pn = RESULT
+ *      Detects:  W1 * W2 = P0 + P1 + ... + Pn = RESULT
  *      where each Pi is the partial product  W1 × digit_i(W2)
  *      (digit_i = i-th digit of W2 from the right, 0-indexed).
  *      Validation per candidate assignment:
@@ -31,6 +31,7 @@
 
 #include <ctype.h>
 #include <limits.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -194,46 +195,46 @@ static void lex(const char *src) {
 }
 
 /* ── Generic evaluator ─────────────────────────────────────────────────── */
-static long eval_word(const char *w) {
-  long v = 0;
+static long long eval_word(const char *w) {
+  long long v = 0;
   for (int i = 0; w[i]; i++)
     v = v * 10 + S.digit[(unsigned char)(w[i] - 'A')];
   return v;
 }
 
-static long parse_expr(void);
+static long long parse_expr(void);
 
-static long parse_factor(void) {
+static long long parse_factor(void) {
   if (S.tokens[S.cur].kind != TK_WORD)
     ERR("expected a word token.");
   return eval_word(S.tokens[S.cur++].word);
 }
 
-static long parse_term(void) {
-  long lhs = parse_factor();
+static long long parse_term(void) {
+  long long lhs = parse_factor();
   while (S.tokens[S.cur].kind == TK_OP &&
          (S.tokens[S.cur].op == OP_MUL || S.tokens[S.cur].op == OP_DIV)) {
     Op op = S.tokens[S.cur++].op;
-    long rhs = parse_factor();
+    long long rhs = parse_factor();
     if (op == OP_MUL) {
       lhs *= rhs;
     } else {
       if (rhs == 0 || lhs % rhs != 0)
-        return LONG_MIN;
+        return LLONG_MIN;
       lhs /= rhs;
     }
   }
   return lhs;
 }
 
-static long parse_expr(void) {
-  long lhs = parse_term();
+static long long parse_expr(void) {
+  long long lhs = parse_term();
   while (S.tokens[S.cur].kind == TK_OP &&
          (S.tokens[S.cur].op == OP_ADD || S.tokens[S.cur].op == OP_SUB)) {
     Op op = S.tokens[S.cur++].op;
-    long rhs = parse_term();
-    if (lhs == LONG_MIN || rhs == LONG_MIN)
-      return LONG_MIN;
+    long long rhs = parse_term();
+    if (lhs == LLONG_MIN || rhs == LLONG_MIN)
+      return LLONG_MIN;
     lhs = (op == OP_ADD) ? lhs + rhs : lhs - rhs;
   }
   return lhs;
@@ -241,11 +242,11 @@ static long parse_expr(void) {
 
 static int evaluate(void) {
   S.cur = 0;
-  long segs[MAX_SEGMENTS];
+  long long segs[MAX_SEGMENTS];
   int nsegs = 0;
   while (S.tokens[S.cur].kind != TK_END) {
-    long v = parse_expr();
-    if (v == LONG_MIN || nsegs >= MAX_SEGMENTS)
+    long long v = parse_expr();
+    if (v == LLONG_MIN || nsegs >= MAX_SEGMENTS)
       return 0;
     segs[nsegs++] = v;
     if (S.tokens[S.cur].kind == TK_EQ)
@@ -268,11 +269,31 @@ static void print_solution(void) {
            S.digit[(unsigned char)(S.letters[i] - 'A')]);
   printf("                  +---------+\n");
   printf("\n  Equation: ");
+  if (S.is_longmul) {
+    long long multiplicand = eval_word(S.lm_multiplicand);
+    long long multiplier = eval_word(S.lm_multiplier);
+    long long product = eval_word(S.lm_product);
+
+    printf("%lld %s %lld = ", multiplicand, op_sym[OP_MUL], multiplier);
+    long long shift = 1;
+    for (int i = 0; i < S.lm_npartials; i++) {
+      if (i > 0)
+        printf(" + ");
+      long long partial = eval_word(S.lm_partials[i]);
+      printf("%lld", partial);
+      if (i > 0)
+        printf("*%lld", shift);
+      shift *= 10;
+    }
+    printf(" = %lld", product);
+    return;
+  }
+
   for (int i = 0; i < S.ntokens - 1; i++) {
     Token *tk = &S.tokens[i];
     switch (tk->kind) {
     case TK_WORD:
-      printf("%ld", eval_word(tk->word));
+      printf("%lld", eval_word(tk->word));
       break;
     case TK_EQ:
       printf(" = ");
@@ -395,17 +416,17 @@ static int detect_long_mul(void) {
  *   PRODUCT = Σ_i  partials[i] * 10^i
  */
 static int evaluate_long_mul(void) {
-  long multiplicand = eval_word(S.lm_multiplicand);
-  long multiplier = eval_word(S.lm_multiplier);
-  long product = eval_word(S.lm_product);
+  long long multiplicand = eval_word(S.lm_multiplicand);
+  long long multiplier = eval_word(S.lm_multiplier);
+  long long product = eval_word(S.lm_product);
 
   if (multiplicand <= 0 || multiplier <= 0 || product <= 0)
     return 0;
 
   /* Check each partial product */
   int mlen = S.lm_npartials;
-  long shift = 1; /* 10^i */
-  long computed_product = 0;
+  long long shift = 1; /* 10^i */
+  long long computed_product = 0;
 
   for (int i = 0; i < mlen; i++) {
     /*
@@ -413,10 +434,10 @@ static int evaluate_long_mul(void) {
      * lm_multiplier[mlen-1-i] is that character.
      */
     int mchar = (unsigned char)(S.lm_multiplier[mlen - 1 - i] - 'A');
-    long mdigit = S.digit[mchar];
+    long long mdigit = S.digit[mchar];
 
-    long expected = eval_word(S.lm_partials[i]);
-    long got = multiplicand * mdigit;
+    long long expected = eval_word(S.lm_partials[i]);
+    long long got = multiplicand * mdigit;
 
     if (got != expected)
       return 0;
@@ -661,7 +682,7 @@ int main(void) {
   printf("+-----------------------------------------+\n");
   printf("\n  Examples:\n");
   printf("    SEND + MORE = MONEY\n");
-  printf("    ABC * DE = FEC + DEC = HGBC\n");
+  printf("    ABC * DE = FEC + DEC = HGBC  (long-mul partials)\n");
   printf("  Equation: ");
   fflush(stdout);
 
