@@ -642,7 +642,7 @@ static void carry_solve(int col, int carry_in) {
  */
 typedef int (*EvalFn)(void);
 
-static void generic_solve_with(int idx, EvalFn eval_fn) {
+static void brute_force_solve_with(int idx, EvalFn eval_fn) {
   if (idx == S.nletters) {
     for (int i = 0; i < S.nletters; i++) {
       int ci = (unsigned char)(S.letters[i] - 'A');
@@ -660,17 +660,24 @@ static void generic_solve_with(int idx, EvalFn eval_fn) {
       continue;
     S.digit[ci] = d;
     S.used[d] = 1;
-    generic_solve_with(idx + 1, eval_fn);
+    brute_force_solve_with(idx + 1, eval_fn);
     S.digit[ci] = -1;
     S.used[d] = 0;
   }
 }
 
-static void generic_solve(int idx) { generic_solve_with(idx, evaluate); }
+static void brute_force_solve(int idx) { brute_force_solve_with(idx, evaluate); }
 
 /* ── Main ──────────────────────────────────────────────────────────────── */
-int main(void) {
+int main(int argc, char *argv[]) {
   char input[MAX_INPUTS];
+  int force_bruteforce = 0;
+
+  for (int i = 1; i < argc; i++) {
+    if (strcmp(argv[i], "--brute-force") == 0 || strcmp(argv[i], "-b") == 0) {
+      force_bruteforce = 1;
+    }
+  }
 
   printf("+-----------------------------------------+\n");
   printf("|         Cryptarithmetic Solver          |\n");
@@ -699,8 +706,13 @@ int main(void) {
   printf("(%d unique)\n", S.nletters);
 
   /* ── Detect puzzle type (in priority order) ── */
-  S.is_addition = detect_addition();
-  S.is_longmul = (!S.is_addition) ? detect_long_mul() : 0;
+  if (force_bruteforce) {
+    S.is_addition = 0;
+    S.is_longmul = 0;
+  } else {
+    S.is_addition = detect_addition();
+    S.is_longmul = (!S.is_addition) ? detect_long_mul() : 0;
+  }
 
   if (S.is_addition) {
     printf("  Mode    : Column-Carry CSP\n");
@@ -749,7 +761,7 @@ int main(void) {
     printf("  Product      : %s\n", S.lm_product);
     printf("\n");
   } else {
-    printf("  Mode    : Generic backtrack + eval\n");
+    printf("  Mode    : Brute-Force + eval\n");
   }
 
   printf("\n  Solving...\n");
@@ -758,9 +770,9 @@ int main(void) {
   if (S.is_addition)
     carry_solve(0, 0);
   else if (S.is_longmul)
-    generic_solve_with(0, evaluate_long_mul);
+    brute_force_solve_with(0, evaluate_long_mul);
   else
-    generic_solve(0);
+    brute_force_solve(0);
 
   printf("\n  +--------------------------------------------+\n");
   if (S.nsolutions == 0)
