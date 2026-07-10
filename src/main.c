@@ -131,6 +131,38 @@ static void register_letter(char c) {
   S.letters[S.nletters++] = c;
 }
 
+/*
+ * normalize_input(s):
+ *   Uppercases all alphabetic input in place so users may type words in
+ *   any case (e.g. "send + more = money" works the same as "SEND + MORE
+ *   = MONEY").
+ *
+ *   Special case: lowercase 'x' doubles as the multiply operator (see
+ *   lex()). To keep that working after normalization, an 'x'/'X' that
+ *   stands alone (not touching another letter on either side) is treated
+ *   as the operator and forced to lowercase 'x'. An 'x'/'X' that is part
+ *   of a longer run of letters is a word character and gets uppercased
+ *   like everything else.
+ */
+static void normalize_input(char *s) {
+  int n = (int)strlen(s);
+  for (int i = 0; i < n; i++) {
+    unsigned char c = (unsigned char)s[i];
+    if (!isalpha(c))
+      continue;
+
+    if (c == 'x' || c == 'X') {
+      int prev_is_alpha = (i > 0) && isalpha((unsigned char)s[i - 1]);
+      int next_is_alpha = (i < n - 1) && isalpha((unsigned char)s[i + 1]);
+      if (!prev_is_alpha && !next_is_alpha) {
+        s[i] = 'x'; /* standalone -> multiply operator */
+        continue;
+      }
+    }
+    s[i] = (char)toupper(c);
+  }
+}
+
 static void lex(const char *src) {
   S.ntokens = 0;
   S.nletters = 0;
@@ -194,7 +226,6 @@ static void lex(const char *src) {
   S.tokens[S.ntokens++] = (Token){.kind = TK_END};
 }
 
-/* ── Generic evaluator ─────────────────────────────────────────────────── */
 static long long eval_word(const char *w) {
   long long v = 0;
   for (int i = 0; w[i]; i++)
@@ -392,57 +423,6 @@ static int detect_long_mul(void) {
     return 0;
 
   return 1;
-}
-
-/*
- * ── Long-multiplication evaluator ─────────────────────────────────────────
- *
- * Called once all letters have been assigned.
- * Returns 1 iff every partial-product constraint holds AND the final product
- * equals the full multiplication.
- *
- * Partials are ordered right-to-left matching digits of the multiplier:
- *   lm_partials[0] = W1 × (rightmost digit of W2)
- *   lm_partials[1] = W1 × (second-from-right digit of W2)
- *   ...
- *   lm_partials[k] = W1 × (leftmost digit of W2)
- *
- * Standard long multiplication final product:
- *   PRODUCT = Σ_i  partials[i] * 10^i
- */
-static int evaluate_long_mul(void) {
-  long long multiplicand = eval_word(S.lm_multiplicand);
-  long long multiplier = eval_word(S.lm_multiplier);
-  long long product = eval_word(S.lm_product);
-
-  if (multiplicand <= 0 || multiplier <= 0 || product <= 0)
-    return 0;
-
-  /* Check each partial product */
-  int mlen = S.lm_npartials;
-  long long shift = 1; /* 10^i */
-  long long computed_product = 0;
-
-  for (int i = 0; i < mlen; i++) {
-    /*
-     * Digit of multiplier at position i from the right.
-     * lm_multiplier[mlen-1-i] is that character.
-     */
-    int mchar = (unsigned char)(S.lm_multiplier[mlen - 1 - i] - 'A');
-    long long mdigit = S.digit[mchar];
-
-    long long expected = eval_word(S.lm_partials[i]);
-    long long got = multiplicand * mdigit;
-
-    if (got != expected)
-      return 0;
-
-    computed_product += expected * shift;
-    shift *= 10;
-  }
-
-  /* Final product must match both the computed shifted sum and the word */
-  return (computed_product == product && multiplicand * multiplier == product);
 }
 
 /* ═══════════════════════════════════════════════════════════════════════
@@ -901,6 +881,8 @@ int main(int argc, char *argv[]) {
   if (!fgets(input, sizeof input, stdin))
     ERR("failed to read input.");
   input[strcspn(input, "\n")] = '\0';
+
+  normalize_input(input);
 
   printf("\n  Input   : \"%s\"\n", input);
   lex(input);
