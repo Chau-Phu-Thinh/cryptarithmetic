@@ -1,5 +1,7 @@
 main
 .agents
+.codex
 .obsidian
 *.o
 bin/
+Trash/
