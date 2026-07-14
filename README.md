@@ -14,8 +14,10 @@ make
 # RUN OPTIONS
 ## bruteforce
 make run-brute-force
+
 ## long-mul
 make run-long-mul
+
 ## column-carry
 make run-column-carry
 
