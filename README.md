@@ -12,6 +12,7 @@ git clone https://github.com/Chau-Phu-Thinh/cryptarithmetic?tab=readme-ov-file
 make
 
 # RUN OPTIONS
+
 ## bruteforce
 make run-brute-force
 
