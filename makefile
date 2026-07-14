@@ -26,7 +26,16 @@ all: $(BIN_DIR)
 	$(CC) $(CFLAGS) $(CSP_SRC) -o $(TARGET) $(LDFLAGS)
 
 run: $(TARGET)
-	$(RUN_CMD)
+	$(RUN_CMD) $(ARGS)
+
+run-brute-force: $(TARGET)
+	$(RUN_CMD) --brute-force
+
+run-long-mul: $(TARGET)
+	$(RUN_CMD) --long-mul
+
+run-column-carry: $(TARGET)
+	$(RUN_CMD) --column-carry
 
 $(BIN_DIR)/%$(EXE): test/%.c | $(BIN_DIR)
 	$(CC) $(CFLAGS) $< -o $@ $(LDFLAGS) -pthread
@@ -37,4 +46,4 @@ $(BIN_DIR):
 clean:
 	-$(RM_DIR)
 
-.PHONY: all clean run 
+.PHONY: all clean run run-brute-force run-long-mul run-column-carry
