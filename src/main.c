@@ -1,33 +1,4 @@
-/*
- * Cryptarithmetic Solver *
- * Constraints:
- *   - Each word ≤ MAX_WORD_LEN (8) letters.
- *   - Each uppercase letter maps to a unique digit 0–9.
- *   - Leading letters of every word cannot be 0.
- *   - Supports: +  -  *  /  =  (and lowercase 'x' as multiply).
- *
- * Pipeline:
- *   Input → Lex → Detect puzzle type → Solve
- *
- * Three solver modes (tried in order):
- *
- * 1. Column-Carry CSP (for A + B + ... = Z):
- *      Process columns right-to-left. At column k, collect letters
- *      first appearing there, try all digit combos, check:
- *          (sum of column digits + carry_in) mod 10 == result_digit[k]
- *      Propagate carry_out = (sum + carry_in) / 10.
- *
- * 2. Long-Multiplication CSP
- *      Detects:  W1 * W2 = P0 + P1 + ... + Pn = RESULT
- *      where each Pi is the partial product  W1 × digit_i(W2)
- *      (digit_i = i-th digit of W2 from the right, 0-indexed).
- *      Validation per candidate assignment:
- *          eval(W1) × digit_i == eval(Pi)   for every i
- *          eval(W1) × eval(W2) == eval(RESULT)
- *      Uses the generic backtracker with this specialised check.
- *
- * 3. Generic backtrack + eval (fallback for all other expressions).
- */
+#define _POSIX_C_SOURCE 199309L
 
 #include <ctype.h>
 #include <limits.h>
@@ -35,6 +6,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 
 #define MAX_WORD_LEN 8
 #define MAX_TOKENS 200
@@ -52,17 +24,6 @@ typedef struct {
   char word[MAX_WORD_LEN + 1];
 } Token;
 
-/* ── Column descriptor (for carry-CSP) ────────────────────────────────── */
-/*
- * For a pure-addition puzzle  W1 + W2 + ... + Wn = RESULT
- * padded to max_len columns (index 0 = rightmost / units column):
- *
- *   letter_idx[j]  — index into S.letters[] for the j-th slot in this col
- *   coeff[j]       — +1 for addend, -1 for result word
- *   n              — how many letter-slots are in this column
- *   new_idx[]      — letters assigned for the FIRST TIME in this column
- *   n_new          — count of new letters
- */
 #define MAX_COL_LETTERS (MAX_ADDENDS + 1)
 
 typedef struct {
@@ -77,9 +38,7 @@ typedef struct {
 typedef struct {
   Token tokens[MAX_TOKENS];
   int ntokens;
-  int cur; // cursor ,  For example : ABC + DEF = BSF, tokens.word = "DEF" & cur
-           // = 3
-
+  int cur;
   char letters[MAX_LETTERS];
   int nletters;
 
@@ -89,24 +48,21 @@ typedef struct {
 
   int nsolutions;
 
-  /* Column-CSP data (mode: addition) */
   int is_addition;
   ColDesc cols[MAX_WORD_LEN + 2];
   int ncols;
   int result_len;
 
-  /* Words in the addition */
   char addends[MAX_ADDENDS][MAX_WORD_LEN + 1];
   int nadd;
   char result[MAX_WORD_LEN + 1];
 
-  /* Long-multiplication data */
-  int is_longmul; /* non-zero when long-mul detected   */
-  char lm_multiplicand[MAX_WORD_LEN + 1]; /* W1 in W1 * W2 = P0+P1+...= PROD  */
-  char lm_multiplier[MAX_WORD_LEN + 1]; /* W2                                */
-  char lm_partials[MAX_WORD_LEN][MAX_WORD_LEN + 1]; /* partial-product words  */
-  int lm_npartials;                  /* == strlen(lm_multiplier)          */
-  char lm_product[MAX_WORD_LEN + 1]; /* final product word                */
+  int is_longmul;
+  char lm_multiplicand[MAX_WORD_LEN + 1];
+  char lm_multiplier[MAX_WORD_LEN + 1];
+  char lm_partials[MAX_WORD_LEN][MAX_WORD_LEN + 1];
+  int lm_npartials;
+  char lm_product[MAX_WORD_LEN + 1];
 } Solver;
 
 static Solver S;
@@ -289,7 +245,7 @@ static const char *op_sym[] = {"+", "-", "×", "÷"};
 
 static void print_solution(void) {
   S.nsolutions++;
-  printf("\n  Solution [#%d]   +---------+\n", S.nsolutions);
+  printf("\n  Solution [#%d]\n                  +---------+\n", S.nsolutions);
   for (int i = 0; i < S.nletters; i++)
     printf("                  | %c  →  %d |\n", S.letters[i],
            S.digit[(unsigned char)(S.letters[i] - 'A')]);
@@ -857,10 +813,18 @@ static void brute_force_solve(int idx) {
 int main(int argc, char *argv[]) {
   char input[MAX_INPUTS];
   int force_bruteforce = 0;
+  int force_longmul = 0;
+  int force_columncarry = 0;
 
   for (int i = 1; i < argc; i++) {
     if (strcmp(argv[i], "--brute-force") == 0 || strcmp(argv[i], "-b") == 0) {
       force_bruteforce = 1;
+    } else if (strcmp(argv[i], "--long-mul") == 0 ||
+               strcmp(argv[i], "-l") == 0) {
+      force_longmul = 1;
+    } else if (strcmp(argv[i], "--column-carry") == 0 ||
+               strcmp(argv[i], "-c") == 0) {
+      force_columncarry = 1;
     }
   }
 
@@ -871,6 +835,8 @@ int main(int argc, char *argv[]) {
   printf("|  · Each letter → unique digit 0–9       |\n");
   printf("|  · Operators: + - * / x =               |\n");
   printf("|  · Long-mul: W1*W2 = P0+P1+...= PROD    |\n");
+  printf("|  · Mode: brute-force, long-mul,         |\n");
+  printf("|             column-carry                |\n");
   printf("+-----------------------------------------+\n");
   printf("\n  Examples:\n");
   printf("    SEND + MORE = MONEY\n");
@@ -896,6 +862,18 @@ int main(int argc, char *argv[]) {
   if (force_bruteforce) {
     S.is_addition = 0;
     S.is_longmul = 0;
+  } else if (force_longmul) {
+    S.is_addition = 0;
+    S.is_longmul = detect_long_mul();
+    if (!S.is_longmul)
+      ERR("input does not match long-multiplication pattern "
+          "(W1 * W2 = P0 + P1 + ... = PRODUCT).");
+  } else if (force_columncarry) {
+    S.is_addition = detect_addition();
+    S.is_longmul = 0;
+    if (!S.is_addition)
+      ERR("input does not match column-carry addition pattern "
+          "(W1 + W2 + ... = RESULT).");
   } else {
     S.is_addition = detect_addition();
     S.is_longmul = (!S.is_addition) ? detect_long_mul() : 0;
@@ -953,12 +931,19 @@ int main(int argc, char *argv[]) {
   printf("\n  Solving...\n");
   S.nsolutions = 0;
 
+  struct timespec t_start, t_end;
+  clock_gettime(CLOCK_MONOTONIC, &t_start);
+
   if (S.is_addition)
     carry_solve(0, 0);
   else if (S.is_longmul)
     longmul_csp_solve();
   else
     brute_force_solve(0);
+
+  clock_gettime(CLOCK_MONOTONIC, &t_end);
+  double elapsed_ms = (t_end.tv_sec - t_start.tv_sec) * 1000.0 +
+                      (t_end.tv_nsec - t_start.tv_nsec) / 1e6;
 
   printf("\n  +--------------------------------------------+\n");
   if (S.nsolutions == 0)
@@ -967,6 +952,7 @@ int main(int argc, char *argv[]) {
     printf("  |  Found:                  %-2d    solution(s) |\n",
            S.nsolutions);
   printf("  +--------------------------------------------+\n");
+  printf("  Execution time: %.3f ms\n", elapsed_ms);
 
   return EXIT_SUCCESS;
 }
