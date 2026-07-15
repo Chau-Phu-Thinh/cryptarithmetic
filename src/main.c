@@ -791,7 +791,7 @@ int main(int argc, char *argv[]) {
   printf("|  · Each word ≤ %d letters                |\n", MAX_WORD_LEN);
   printf("|  · Each letter → unique digit 0–9       |\n");
   printf("|  · Operators: + - * / x =               |\n");
-  printf("|  · Column-Carry: W1+W2+...+Wn =  PROD    |\n");
+  printf("|  · Column-Carry: W1+W2+...+Wn = PROD    |\n");
   printf("|  · Long-mul: W1*W2 = P0+P1+...= PROD    |\n");
   printf("|  · Flags: --brute-force --long-mul      |\n");
   printf("|           --column-carry                |\n");
