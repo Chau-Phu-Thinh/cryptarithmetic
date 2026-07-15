@@ -408,10 +408,14 @@
                     <div id="partials-container" style="display:flex; flex-direction:column; gap:10px;"></div>
                 </div>
 
-                <div class="action-row">
-                    <button class="btn-solve" onclick="loadExample()" style="background: linear-gradient(135deg, #10b981, #059669); margin-right: 15px;">Ví dụ</button>
-                    <button class="btn-solve" onclick="executeSolver()">Chạy thuật toán</button>
-                    <div id="error-message" class="error-msg"></div>
+                <div class="action-row" style="flex-wrap: wrap; justify-content: center; gap: 15px;">
+                    <select id="algorithm-select" class="operator-select" style="margin: 0; font-size: 16px; padding: 10px 20px; border-radius: 8px; flex-grow: 1; max-width: 250px;" onchange="togglePartials()">
+                        <option value="brute_force">Vét cạn thô</option>
+                        <option value="long_mult">Nhân dài</option>
+                    </select>
+                    <button class="btn-solve" onclick="loadExample()" style="background: linear-gradient(135deg, #10b981, #059669); margin: 0;">Ví dụ</button>
+                    <button class="btn-solve" onclick="executeSolver()" style="margin: 0;">Chạy thuật toán</button>
+                    <div id="error-message" class="error-msg" style="width: 100%;"></div>
                 </div>
 
                 <div id="results-container"></div>
@@ -519,10 +523,34 @@
             event.target.classList.add('active');
         }
 
-        // --- Long Multiplication Logic ---
+        // --- Algorithm & Long Multiplication Logic ---
         function togglePartials() {
             const op = document.getElementById('operator').value;
-            document.getElementById('partials-wrapper').style.display = (op === '*') ? 'flex' : 'none';
+            const algoSelect = document.getElementById('algorithm-select');
+            const currentAlgo = algoSelect.value;
+            
+            // Update algorithm options
+            algoSelect.innerHTML = '';
+            if (op === '+') {
+                algoSelect.innerHTML += '<option value="brute_force">Vét cạn thô</option>';
+                algoSelect.innerHTML += '<option value="column_carry">Biến nhớ theo cột</option>';
+            } else if (op === '*') {
+                algoSelect.innerHTML += '<option value="brute_force">Vét cạn thô</option>';
+                algoSelect.innerHTML += '<option value="long_mult">Nhân dài</option>';
+            } else {
+                algoSelect.innerHTML += '<option value="brute_force">Vét cạn thô</option>';
+            }
+            
+            // Retain selection if valid
+            const newOptions = Array.from(algoSelect.options).map(o => o.value);
+            if (newOptions.includes(currentAlgo)) {
+                algoSelect.value = currentAlgo;
+            } else {
+                algoSelect.selectedIndex = 0;
+            }
+
+            const algo = algoSelect.value;
+            document.getElementById('partials-wrapper').style.display = (op === '*' && algo === 'long_mult') ? 'flex' : 'none';
             updatePartials();
         }
 
@@ -616,6 +644,7 @@
         createBoxes('word1-group');
         createBoxes('word2-group');
         createBoxes('result-group');
+        togglePartials(); // Initialize the UI properly based on default selections
         togglePartials(); // Gọi ngay lần đầu để hiện khung tích riêng phần
 
         function moveToNext(current) {
@@ -715,17 +744,19 @@
             const w2 = getWordFromGroup('word2-group');
             const res = getWordFromGroup('result-group');
             const op = document.getElementById('operator').value;
+            const algoSelect = document.getElementById('algorithm-select');
+            const algo = algoSelect ? algoSelect.value : 'brute_force';
 
-            // Đọc các partial products nếu là phép nhân
+            // Đọc các partial products nếu là phép nhân DÀI
             let partials = [];
-            if (op === '*') {
+            if (op === '*' && algo === 'long_mult') {
                 for (let i = 0; i < w2.length; i++) {
                     partials.push(getWordFromGroup(`partial-group-${i}`));
                 }
             }
 
-            let allWords = w1 + w2 + res + partials.join('');
-            if (!w1 || !w2 || !res || (op === '*' && partials.some(p => !p))) {
+            let allWords = w1 + w2 + res + (algo === 'long_mult' ? partials.join('') : '');
+            if (!w1 || !w2 || !res || (op === '*' && algo === 'long_mult' && partials.some(p => !p))) {
                 errorDiv.textContent = "Lỗi: Vui lòng nhập đầy đủ các từ và tích riêng phần!";
                 return;
             }
@@ -754,13 +785,16 @@
                 if(op === '-') return val1 - val2 === valRes;
                 if(op === '*') {
                     if (val1 * val2 !== valRes) return false;
-                    let strVal2 = val2.toString();
-                    if (strVal2.length !== w2.length) return false; 
                     
-                    for (let i = 0; i < w2.length; i++) {
-                        let digit = parseInt(strVal2[strVal2.length - 1 - i]);
-                        let pVal = parseInt(partials[i].split('').map(c => charMap[c]).join(''));
-                        if (val1 * digit !== pVal) return false;
+                    if (algo === 'long_mult') {
+                        let strVal2 = val2.toString();
+                        if (strVal2.length !== w2.length) return false; 
+                        
+                        for (let i = 0; i < w2.length; i++) {
+                            let digit = parseInt(strVal2[strVal2.length - 1 - i]);
+                            let pVal = parseInt(partials[i].split('').map(c => charMap[c]).join(''));
+                            if (val1 * digit !== pVal) return false;
+                        }
                     }
                     return true;
                 }
@@ -803,8 +837,12 @@
                 errorDiv.textContent = `Không tìm thấy nghiệm hợp lệ (Đã quét trong ${(endTime - startTime).toFixed(2)}ms)`;
                 return;
             }
+            
+            let algoName = "Vét cạn thô (Brute Force)";
+            if (algo === 'column_carry') algoName = "Biến nhớ theo cột (Column-Carry CSP)";
+            if (algo === 'long_mult') algoName = "Nhân dài (Long Multiplication CSP)";
 
-            let html = `<p style="color:var(--success); margin-bottom: 20px;">✓ Tìm thấy ${solutions.length} nghiệm trong ${(endTime - startTime).toFixed(2)}ms</p>`;
+            let html = `<p style="color:var(--success); margin-bottom: 20px;">✓ Chạy bằng <strong>${algoName}</strong>. Tìm thấy ${solutions.length} nghiệm trong ${(endTime - startTime).toFixed(2)}ms</p>`;
             
             solutions.forEach((sol, index) => {
                 let numW1 = w1.split('').map(c => sol[c]).join('');
