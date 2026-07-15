@@ -87,19 +87,6 @@ static void register_letter(char c) {
   S.letters[S.nletters++] = c;
 }
 
-/*
- * normalize_input(s):
- *   Uppercases all alphabetic input in place so users may type words in
- *   any case (e.g. "send + more = money" works the same as "SEND + MORE
- *   = MONEY").
- *
- *   Special case: lowercase 'x' doubles as the multiply operator (see
- *   lex()). To keep that working after normalization, an 'x'/'X' that
- *   stands alone (not touching another letter on either side) is treated
- *   as the operator and forced to lowercase 'x'. An 'x'/'X' that is part
- *   of a longer run of letters is a word character and gets uppercased
- *   like everything else.
- */
 static void normalize_input(char *s) {
   int n = (int)strlen(s);
   for (int i = 0; i < n; i++) {
@@ -243,15 +230,34 @@ static int evaluate(void) {
 
 static const char *op_sym[] = {"+", "-", "×", "÷"};
 
+/* Set by brute_force_solve() when the raw input structurally matches
+ * long-mul notation, so print_solution() knows to display it with the
+ * correct column shift instead of the generic literal-sum format. */
+static int G_bf_longmul_shape = 0;
+
+static int evaluate_longmul_shape(void) {
+  long long w1 = eval_word(S.lm_multiplicand);
+  long long w2 = eval_word(S.lm_multiplier);
+  long long product = eval_word(S.lm_product);
+
+  long long shifted_sum = 0, shift = 1;
+  for (int i = 0; i < S.lm_npartials; i++) {
+    shifted_sum += eval_word(S.lm_partials[i]) * shift;
+    shift *= 10;
+  }
+
+  return (w1 * w2 == product) && (shifted_sum == product);
+}
+
 static void print_solution(void) {
   S.nsolutions++;
-  printf("\n  Solution [#%d]\n                  +---------+\n", S.nsolutions);
+  printf("\n  Solution [#%d]   +---------+\n", S.nsolutions);
   for (int i = 0; i < S.nletters; i++)
     printf("                  | %c  →  %d |\n", S.letters[i],
            S.digit[(unsigned char)(S.letters[i] - 'A')]);
   printf("                  +---------+\n");
   printf("\n  Equation: ");
-  if (S.is_longmul) {
+  if (S.is_longmul || G_bf_longmul_shape) {
     long long multiplicand = eval_word(S.lm_multiplicand);
     long long multiplier = eval_word(S.lm_multiplier);
     long long product = eval_word(S.lm_product);
@@ -380,24 +386,6 @@ static int detect_long_mul(void) {
 
   return 1;
 }
-
-/* ═══════════════════════════════════════════════════════════════════════
- * Long-multiplication CSP
- * Mirrors the addition column-carry solver, but applied twice:
- *   Pass 1 — for each multiplier digit i (right to left), multiply the
- *            multiplicand column-by-column with carry, checking each
- *            column against the matching digit of partial[i].
- *   Pass 2 — add the (shifted) partials into PRODUCT, column-by-column
- *            with carry, exactly like ordinary long addition.
- *
- * Only the multiplicand's and multiplier's digits are "free" (enumerated
- * 0-9 on first appearance). Every partial-product digit and every
- * product digit is arithmetically FORCED — it is assigned directly and
- * only checked for availability / leading-zero / consistency, never
- * enumerated. This is what makes it a real CSP: a wrong forced digit
- * prunes the branch immediately instead of waiting for a full
- * permutation to be built and evaluated.
- * ═══════════════════════════════════════════════════════════════════ */
 
 typedef enum { FA_FAIL, FA_ALREADY, FA_NEW } FAResult;
 
@@ -597,12 +585,7 @@ static void build_columns(void) {
     if (l > maxlen)
       maxlen = l;
   }
-  /*
-   * Allow one extra carry column beyond the result length.
-   * e.g. SEND + MORE = MONEY: result is 5 chars, addends 4 chars;
-   * we still need col[4] to hold any leftover carry that the result
-   * absorbs with its leading digit.
-   */
+
   S.result_len = (int)strlen(S.result);
   S.ncols = maxlen + 1;
 
@@ -658,35 +641,11 @@ static void build_columns(void) {
 
 static void carry_solve(int col, int carry_in);
 
-/*
- * assign_new(col, carry_in, new_pos):
- *   Recursively assign digits to each unassigned letter that first
- *   appears in column `col`.  When all new letters are assigned,
- *   validate the column constraint and propagate carry.
- */
 static void assign_new(int col, int carry_in, int new_pos) {
   ColDesc *cd = &S.cols[col];
 
   if (new_pos == cd->n_new) {
-    /* ── All letters in this column now have a digit ── */
 
-    /*
-     * Compute the addend sum for this column:
-     *   addend_sum = Σ digit[letter] for all addend slots in this column
-     *   total      = addend_sum + carry_in
-     *
-     * Constraint (for carry propagation):
-     *   digit_needed  = total mod 10          (must equal result digit)
-     *   carry_out     = total / 10
-     *
-     * If the result has a letter in this column, its digit must equal
-     * digit_needed.  If not (column beyond result length), digit_needed
-     * must be 0 (no residue spills past the result).
-     */
-    /*
-     * Helper: get the digit assigned to letter at letters[li].
-     * S.digit is indexed by (letter - 'A'), NOT by li.
-     */
 #define LDIGIT(li) S.digit[(unsigned char)(S.letters[(li)] - 'A')]
 
     int addend_sum = 0;
@@ -775,11 +734,6 @@ static void carry_solve(int col, int carry_in) {
   assign_new(col, carry_in, 0);
 }
 
-/* ── Generic backtrack solver ──────────────────────────────────────────── */
-/*
- * evaluator_fn: function pointer so the same backtracker can be used
- * both for the generic expression evaluator and for the long-mul check.
- */
 typedef int (*EvalFn)(void);
 
 static void brute_force_solve_with(int idx, EvalFn eval_fn) {
@@ -807,7 +761,9 @@ static void brute_force_solve_with(int idx, EvalFn eval_fn) {
 }
 
 static void brute_force_solve(int idx) {
-  brute_force_solve_with(idx, evaluate);
+  G_bf_longmul_shape = detect_long_mul();
+  EvalFn fn = G_bf_longmul_shape ? evaluate_longmul_shape : evaluate;
+  brute_force_solve_with(idx, fn);
 }
 
 int main(int argc, char *argv[]) {
@@ -835,8 +791,8 @@ int main(int argc, char *argv[]) {
   printf("|  · Each letter → unique digit 0–9       |\n");
   printf("|  · Operators: + - * / x =               |\n");
   printf("|  · Long-mul: W1*W2 = P0+P1+...= PROD    |\n");
-  printf("|  · Mode: brute-force, long-mul,         |\n");
-  printf("|             column-carry                |\n");
+  printf("|  · Flags: --brute-force --long-mul      |\n");
+  printf("|           --column-carry                |\n");
   printf("+-----------------------------------------+\n");
   printf("\n  Examples:\n");
   printf("    SEND + MORE = MONEY\n");
