@@ -226,6 +226,55 @@
             box-shadow: 0 15px 25px var(--accent-glow);
         }
 
+        /* New Custom Classes for Enhanced Experience */
+        .char-box.highlight-match {
+            border-color: var(--accent) !important;
+            background: rgba(255, 255, 255, 0.85);
+            box-shadow: 0 0 15px var(--accent-glow) !important;
+            transform: translateY(-4px) scale(1.03);
+            animation: none;
+        }
+
+        .algo-select {
+            margin: 0;
+            font-size: 16px;
+            padding: 10px 20px;
+            border-radius: 12px;
+            flex-grow: 1;
+            max-width: 250px;
+            height: 50px;
+            background: rgba(255, 255, 255, 0.5);
+            color: var(--accent);
+            font-weight: 600;
+            border: 1px solid var(--glass-border);
+            cursor: pointer;
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.05), inset 0 0 10px rgba(255, 255, 255, 0.5);
+        }
+        .algo-select:focus {
+            outline: none;
+            border-color: var(--accent);
+            box-shadow: 0 8px 25px var(--accent-glow);
+        }
+
+        .btn-clear {
+            background: linear-gradient(135deg, #f27474, #d20f39);
+            box-shadow: 0 10px 20px rgba(210, 15, 57, 0.25);
+        }
+        .btn-clear:hover {
+            box-shadow: 0 15px 25px rgba(210, 15, 57, 0.35);
+        }
+
+        .btn-example {
+            background: linear-gradient(135deg, #40a02b, #22c55e);
+            box-shadow: 0 10px 20px rgba(64, 160, 43, 0.25);
+        }
+        .btn-example:hover {
+            box-shadow: 0 15px 25px rgba(64, 160, 43, 0.35);
+        }
+
         /* --- RESULTS AREA --- */
         #results-container { margin-top: 30px; }
         .result-card {
@@ -341,6 +390,32 @@
                 border: 1px solid rgba(255, 255, 255, 0.1);
             }
             
+            .char-box.highlight-match {
+                background: rgba(49, 50, 68, 0.95);
+                box-shadow: 0 0 15px var(--accent-glow) !important;
+            }
+            .algo-select {
+                background: rgba(30, 30, 46, 0.7);
+                border: 1px solid rgba(255, 255, 255, 0.1);
+                color: var(--accent);
+                box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1), inset 0 0 10px rgba(255, 255, 255, 0.02);
+            }
+            .btn-clear {
+                background: linear-gradient(135deg, #f38ba8, #e78284);
+                box-shadow: 0 10px 20px rgba(243, 139, 168, 0.25) !important;
+            }
+            .btn-clear:hover {
+                box-shadow: 0 15px 25px rgba(243, 139, 168, 0.35) !important;
+            }
+            .btn-example {
+                background: linear-gradient(135deg, #a6e3a1, #a6e3a1);
+                box-shadow: 0 10px 20px rgba(166, 227, 161, 0.25) !important;
+                color: #11111b;
+            }
+            .btn-example:hover {
+                box-shadow: 0 15px 25px rgba(166, 227, 161, 0.35) !important;
+            }
+            
             .nav-btn.active {
                 background: rgba(49, 50, 68, 0.6);
             }
@@ -409,13 +484,16 @@
                     <div id="partials-container" style="display:flex; flex-direction:column; gap:10px;"></div>
                 </div>
 
-                <div class="action-row" style="flex-wrap: wrap; justify-content: center; gap: 15px;">
-                    <select id="algorithm-select" class="operator-select" style="margin: 0; font-size: 16px; padding: 10px 20px; border-radius: 8px; flex-grow: 1; max-width: 250px;" onchange="togglePartials()">
+                <div class="action-row" style="display: flex; flex-wrap: wrap; justify-content: center; gap: 15px; align-items: center;">
+                    <select id="algorithm-select" class="algo-select" onchange="togglePartials()">
+                        <option value="auto" selected>Tự động (Tối ưu nhất)</option>
                         <option value="brute_force">Vét cạn thô</option>
-                        <option value="long_mult">Nhân dài</option>
+                        <option value="column_carry">Biến nhớ theo cột (Cộng)</option>
+                        <option value="long_mult">Nhân dài (Nhân)</option>
                     </select>
-                    <button class="btn-solve" onclick="loadExample()" style="background: linear-gradient(135deg, #10b981, #059669); margin: 0;">Ví dụ</button>
+                    <button class="btn-solve btn-example" onclick="loadExample()" style="margin: 0;">Ví dụ</button>
                     <button class="btn-solve" onclick="executeSolver()" style="margin: 0;">Chạy thuật toán</button>
+                    <button class="btn-solve btn-clear" onclick="clearAll()" style="margin: 0;">Xóa tất cả</button>
                     <div id="error-message" class="error-msg" style="width: 100%;"></div>
                 </div>
 
@@ -534,30 +612,12 @@
         function togglePartials() {
             const op = document.getElementById('operator').value;
             const algoSelect = document.getElementById('algorithm-select');
-            const currentAlgo = algoSelect.value;
-            
-            // Update algorithm options
-            algoSelect.innerHTML = '';
-            if (op === '+') {
-                algoSelect.innerHTML += '<option value="brute_force">Vét cạn thô</option>';
-                algoSelect.innerHTML += '<option value="column_carry">Biến nhớ theo cột</option>';
-            } else if (op === '*') {
-                algoSelect.innerHTML += '<option value="brute_force">Vét cạn thô</option>';
-                algoSelect.innerHTML += '<option value="long_mult">Nhân dài</option>';
-            } else {
-                algoSelect.innerHTML += '<option value="brute_force">Vét cạn thô</option>';
-            }
-            
-            // Retain selection if valid
-            const newOptions = Array.from(algoSelect.options).map(o => o.value);
-            if (newOptions.includes(currentAlgo)) {
-                algoSelect.value = currentAlgo;
-            } else {
-                algoSelect.selectedIndex = 0;
-            }
-
             const algo = algoSelect.value;
-            document.getElementById('partials-wrapper').style.display = (op === '*' && algo === 'long_mult') ? 'flex' : 'none';
+            
+            const wrapper = document.getElementById('partials-wrapper');
+            if (wrapper) {
+                wrapper.style.display = (op === '*' && (algo === 'auto' || algo === 'long_mult')) ? 'flex' : 'none';
+            }
             updatePartials();
         }
 
@@ -599,8 +659,7 @@
                     input.type = 'text';
                     input.className = 'char-box';
                     input.maxLength = 1;
-                    input.oninput = function() { moveToNext(this); };
-                    input.onkeydown = function(e) { handleKeyDown(e, this); };
+                    addInputListeners(input);
                     if (oldValues[i] && oldValues[i][j]) input.value = oldValues[i][j];
                     group.appendChild(input);
                 }
@@ -610,6 +669,7 @@
 
         function loadExample() {
             document.getElementById('operator').value = '*';
+            document.getElementById('algorithm-select').value = 'auto';
             togglePartials();
 
             function fillGroup(groupId, word) {
@@ -632,6 +692,65 @@
             }, 50);
         }
 
+        // --- Highlight and Navigation Helpers ---
+        function highlightLetter(char, active) {
+            if (!char) return;
+            const focusedVal = document.activeElement && document.activeElement.classList.contains('char-box') ? document.activeElement.value : '';
+            const allBoxes = document.querySelectorAll('.char-box');
+            allBoxes.forEach(box => {
+                if (active && box.value === char) {
+                    box.classList.add('highlight-match');
+                } else {
+                    if (!focusedVal || box.value !== focusedVal) {
+                        box.classList.remove('highlight-match');
+                    }
+                }
+            });
+        }
+
+        function addInputListeners(input) {
+            input.oninput = function() {
+                moveToNext(this);
+                highlightLetter(this.value, true);
+            };
+            input.onkeydown = function(e) { handleKeyDown(e, this); };
+            input.onfocus = function() {
+                highlightLetter(this.value, true);
+            };
+            input.onblur = function() {
+                document.querySelectorAll('.char-box').forEach(b => b.classList.remove('highlight-match'));
+            };
+            input.onmouseenter = function() {
+                highlightLetter(this.value, true);
+            };
+            input.onmouseleave = function() {
+                const focused = document.activeElement;
+                if (focused !== this) {
+                    highlightLetter(this.value, false);
+                }
+            };
+            input.onpaste = function(e) {
+                e.preventDefault();
+                let text = (e.clipboardData || window.clipboardData).getData('text').toUpperCase().replace(/[^A-Z]/g, '');
+                let currentInput = this;
+                let parent = currentInput.parentElement;
+                let inputs = Array.from(parent.querySelectorAll('input'));
+                let startIndex = inputs.indexOf(currentInput);
+                for (let i = 0; i < text.length && (startIndex + i) < inputs.length; i++) {
+                    inputs[startIndex + i].value = text[i];
+                }
+                if (parent.id === 'word2-group') updatePartials();
+                
+                let nextIndex = startIndex + text.length;
+                if (nextIndex < inputs.length) {
+                    inputs[nextIndex].focus();
+                } else {
+                    let lastFilled = inputs[Math.min(startIndex + text.length - 1, inputs.length - 1)];
+                    if (lastFilled) moveToNext(lastFilled);
+                }
+            };
+        }
+
         // --- Box Input Logic (UI) ---
         function createBoxes(groupId) {
             const group = document.getElementById(groupId);
@@ -641,8 +760,7 @@
                 input.type = 'text';
                 input.className = 'char-box';
                 input.maxLength = 1;
-                input.oninput = function() { moveToNext(this); };
-                input.onkeydown = function(e) { handleKeyDown(e, this); };
+                addInputListeners(input);
                 group.appendChild(input);
             }
         }
@@ -651,15 +769,53 @@
         createBoxes('word1-group');
         createBoxes('word2-group');
         createBoxes('result-group');
-        togglePartials(); // Initialize the UI properly based on default selections
-        togglePartials(); // Gọi ngay lần đầu để hiện khung tích riêng phần
+        togglePartials();
+
+        function clearAll() {
+            document.querySelectorAll('.word-group input').forEach(input => input.value = '');
+            const container = document.getElementById('partials-container');
+            if (container) container.innerHTML = '';
+            updatePartials();
+            const errorDiv = document.getElementById('error-message');
+            if (errorDiv) errorDiv.textContent = '';
+            const resDiv = document.getElementById('results-container');
+            if (resDiv) resDiv.innerHTML = '';
+            const firstInput = document.getElementById('word1-group').querySelector('input');
+            if (firstInput) firstInput.focus();
+        }
 
         function moveToNext(current) {
             current.value = current.value.toUpperCase();
             if (current.value.match(/[^A-Z]/)) current.value = ''; // Only A-Z
             if (current.value.length === 1) {
                 let next = current.nextElementSibling;
-                if (next && next.tagName === 'INPUT') next.focus();
+                if (next && next.tagName === 'INPUT') {
+                    next.focus();
+                } else {
+                    let parentId = current.parentElement.id;
+                    if (parentId === 'word1-group') {
+                        document.getElementById('operator').focus();
+                    } else if (parentId === 'word2-group') {
+                        let resGroup = document.getElementById('result-group');
+                        if (resGroup) {
+                            let firstInput = resGroup.querySelector('input');
+                            if (firstInput) firstInput.focus();
+                        }
+                    } else if (parentId === 'result-group') {
+                        let p0 = document.getElementById('partial-group-0');
+                        if (p0) {
+                            let firstInput = p0.querySelector('input');
+                            if (firstInput) firstInput.focus();
+                        }
+                    } else if (parentId.startsWith('partial-group-')) {
+                        let idx = parseInt(parentId.replace('partial-group-', ''));
+                        let nextG = document.getElementById(`partial-group-${idx + 1}`);
+                        if (nextG) {
+                            let firstInput = nextG.querySelector('input');
+                            if (firstInput) firstInput.focus();
+                        }
+                    }
+                }
             }
             if (current.parentElement.id === 'word2-group') updatePartials();
         }
@@ -668,20 +824,92 @@
             if (e.key === "Backspace" && current.value === '') {
                 e.preventDefault();
                 let prev = current.previousElementSibling;
-                if (prev && prev.tagName === 'INPUT') prev.focus();
+                if (prev && prev.tagName === 'INPUT') {
+                    prev.focus();
+                } else {
+                    let parentId = current.parentElement.id;
+                    if (parentId === 'word2-group') {
+                        document.getElementById('operator').focus();
+                    } else if (parentId === 'result-group') {
+                        let w2Inputs = document.getElementById('word2-group').querySelectorAll('input');
+                        if (w2Inputs.length > 0) w2Inputs[w2Inputs.length - 1].focus();
+                    } else if (parentId.startsWith('partial-group-')) {
+                        let idx = parseInt(parentId.replace('partial-group-', ''));
+                        if (idx === 0) {
+                            let resInputs = document.getElementById('result-group').querySelectorAll('input');
+                            if (resInputs.length > 0) resInputs[resInputs.length - 1].focus();
+                        } else {
+                            let prevInputs = document.getElementById(`partial-group-${idx - 1}`).querySelectorAll('input');
+                            if (prevInputs.length > 0) prevInputs[prevInputs.length - 1].focus();
+                        }
+                    }
+                }
             }
             if (e.key === "Backspace" && current.parentElement.id === 'word2-group') {
                 setTimeout(updatePartials, 10);
             }
             if (e.key === "ArrowLeft") {
-                e.preventDefault();
                 let prev = current.previousElementSibling;
-                if (prev && prev.tagName === 'INPUT') prev.focus();
+                if (prev && prev.tagName === 'INPUT') {
+                    e.preventDefault();
+                    prev.focus();
+                } else {
+                    let parentId = current.parentElement.id;
+                    if (parentId === 'word2-group') {
+                        e.preventDefault();
+                        document.getElementById('operator').focus();
+                    } else if (parentId === 'result-group') {
+                        e.preventDefault();
+                        let w2Inputs = document.getElementById('word2-group').querySelectorAll('input');
+                        if (w2Inputs.length > 0) w2Inputs[w2Inputs.length - 1].focus();
+                    } else if (parentId.startsWith('partial-group-')) {
+                        let idx = parseInt(parentId.replace('partial-group-', ''));
+                        if (idx === 0) {
+                            e.preventDefault();
+                            let resInputs = document.getElementById('result-group').querySelectorAll('input');
+                            if (resInputs.length > 0) resInputs[resInputs.length - 1].focus();
+                        } else {
+                            let prevInputs = document.getElementById(`partial-group-${idx - 1}`).querySelectorAll('input');
+                            if (prevInputs.length > 0) prevInputs[prevInputs.length - 1].focus();
+                        }
+                    }
+                }
             }
             if (e.key === "ArrowRight") {
-                e.preventDefault();
                 let next = current.nextElementSibling;
-                if (next && next.tagName === 'INPUT') next.focus();
+                if (next && next.tagName === 'INPUT') {
+                    e.preventDefault();
+                    next.focus();
+                } else {
+                    let parentId = current.parentElement.id;
+                    if (parentId === 'word1-group') {
+                        e.preventDefault();
+                        document.getElementById('operator').focus();
+                    } else if (parentId === 'word2-group') {
+                        e.preventDefault();
+                        let resInputs = document.getElementById('result-group').querySelectorAll('input');
+                        if (resInputs.length > 0) resInputs[0].focus();
+                    } else if (parentId === 'result-group') {
+                        e.preventDefault();
+                        let p0 = document.getElementById('partial-group-0');
+                        if (p0) {
+                            let p0Inputs = p0.querySelectorAll('input');
+                            if (p0Inputs.length > 0) p0Inputs[0].focus();
+                        }
+                    } else if (parentId.startsWith('partial-group-')) {
+                        let idx = parseInt(parentId.replace('partial-group-', ''));
+                        let nextG = document.getElementById(`partial-group-${idx + 1}`);
+                        if (nextG) {
+                            e.preventDefault();
+                            let nextInputs = nextG.querySelectorAll('input');
+                            if (nextInputs.length > 0) nextInputs[0].focus();
+                        }
+                    }
+                }
+            }
+            if (e.key === "Enter") {
+                e.preventDefault();
+                executeSolver();
             }
             if (e.key === "Tab") {
                 e.preventDefault();
@@ -695,27 +923,29 @@
                     } else if (parentId === 'result-group') {
                         let p0 = document.getElementById('partial-group-0');
                         if (p0) p0.querySelector('input').focus();
-                        else document.querySelectorAll('.btn-solve')[1].focus(); // Nút Khởi chạy
+                        else document.querySelector('.btn-solve:not(.btn-example):not(.btn-clear)').focus();
                     } else if (parentId.startsWith('partial-group-')) {
                         let idx = parseInt(parentId.replace('partial-group-', ''));
                         let nextG = document.getElementById(`partial-group-${idx + 1}`);
                         if (nextG) nextG.querySelector('input').focus();
-                        else document.querySelectorAll('.btn-solve')[1].focus();
+                        else document.querySelector('.btn-solve:not(.btn-example):not(.btn-clear)').focus();
                     }
                 } else { // Shift+Tab (Backward)
                     if (parentId === 'word2-group') {
                         document.getElementById('operator').focus();
                     } else if (parentId === 'result-group') {
-                        document.getElementById('word2-group').querySelector('input').focus();
+                        let w2Inputs = document.getElementById('word2-group').querySelectorAll('input');
+                        if (w2Inputs.length > 0) w2Inputs[w2Inputs.length - 1].focus();
                     } else if (parentId.startsWith('partial-group-')) {
                         let idx = parseInt(parentId.replace('partial-group-', ''));
                         if (idx === 0) document.getElementById('result-group').querySelector('input').focus();
                         else {
                             let prevG = document.getElementById(`partial-group-${idx - 1}`);
-                            if (prevG) prevG.querySelector('input').focus();
+                            if (prevG) {
+                                let prevInputs = prevG.querySelectorAll('input');
+                                if (prevInputs.length > 0) prevInputs[prevInputs.length - 1].focus();
+                            }
                         }
-                    } else if (parentId === 'word1-group') {
-                        // let default behavior
                     }
                 }
             }
@@ -725,8 +955,23 @@
         document.getElementById('operator').addEventListener('keydown', function(e) {
             if (e.key === "Tab") {
                 e.preventDefault();
-                if (!e.shiftKey) document.getElementById('word2-group').querySelector('input').focus();
-                else document.getElementById('word1-group').querySelector('input').focus();
+                if (!e.shiftKey) {
+                    let w2Inputs = document.getElementById('word2-group').querySelectorAll('input');
+                    if (w2Inputs.length > 0) w2Inputs[0].focus();
+                } else {
+                    let w1Inputs = document.getElementById('word1-group').querySelectorAll('input');
+                    if (w1Inputs.length > 0) w1Inputs[w1Inputs.length - 1].focus();
+                }
+            }
+            if (e.key === "ArrowRight" || e.key === "Enter") {
+                e.preventDefault();
+                let w2Inputs = document.getElementById('word2-group').querySelectorAll('input');
+                if (w2Inputs.length > 0) w2Inputs[0].focus();
+            }
+            if (e.key === "ArrowLeft") {
+                e.preventDefault();
+                let w1Inputs = document.getElementById('word1-group').querySelectorAll('input');
+                if (w1Inputs.length > 0) w1Inputs[w1Inputs.length - 1].focus();
             }
         });
 
@@ -752,18 +997,51 @@
             const res = getWordFromGroup('result-group');
             const op = document.getElementById('operator').value;
             const algoSelect = document.getElementById('algorithm-select');
-            const algo = algoSelect ? algoSelect.value : 'brute_force';
+            const algo = algoSelect ? algoSelect.value : 'auto';
 
-            // Đọc các partial products nếu là phép nhân DÀI
+            // Phân giải giải thuật thực tế để chạy
+            let actualAlgo = algo;
+            if (algo === 'auto') {
+                if (op === '+') {
+                    actualAlgo = 'column_carry';
+                } else if (op === '*') {
+                    let hasPartials = true;
+                    for (let i = 0; i < w2.length; i++) {
+                        if (!getWordFromGroup(`partial-group-${i}`)) {
+                            hasPartials = false;
+                            break;
+                        }
+                    }
+                    if (w2.length > 0 && hasPartials) {
+                        actualAlgo = 'long_mult';
+                    } else {
+                        actualAlgo = 'brute_force';
+                    }
+                } else {
+                    actualAlgo = 'brute_force';
+                }
+            }
+
+            // Kiểm tra tính tương thích của giải thuật được chọn thủ công
+            if (actualAlgo === 'column_carry' && op !== '+') {
+                errorDiv.textContent = 'Lỗi: Giải thuật "Biến nhớ theo cột" chỉ hỗ trợ phép cộng (+)!';
+                return;
+            }
+            if (actualAlgo === 'long_mult' && op !== '*') {
+                errorDiv.textContent = 'Lỗi: Giải thuật "Nhân dài" chỉ hỗ trợ phép nhân (*)!';
+                return;
+            }
+
+            // Đọc các tích riêng phần nếu là phép nhân DÀI
             let partials = [];
-            if (op === '*' && algo === 'long_mult') {
+            if (op === '*' && actualAlgo === 'long_mult') {
                 for (let i = 0; i < w2.length; i++) {
                     partials.push(getWordFromGroup(`partial-group-${i}`));
                 }
             }
 
-            let allWords = w1 + w2 + res + (algo === 'long_mult' ? partials.join('') : '');
-            if (!w1 || !w2 || !res || (op === '*' && algo === 'long_mult' && partials.some(p => !p))) {
+            let allWords = w1 + w2 + res + (actualAlgo === 'long_mult' ? partials.join('') : '');
+            if (!w1 || !w2 || !res || (op === '*' && actualAlgo === 'long_mult' && partials.some(p => !p))) {
                 errorDiv.textContent = "Lỗi: Vui lòng nhập đầy đủ các từ và tích riêng phần!";
                 return;
             }
@@ -793,7 +1071,7 @@
                 if(op === '*') {
                     if (val1 * val2 !== valRes) return false;
                     
-                    if (algo === 'long_mult') {
+                    if (actualAlgo === 'long_mult') {
                         let strVal2 = val2.toString();
                         if (strVal2.length !== w2.length) return false; 
                         
@@ -949,9 +1227,9 @@
             }
 
             const startTime = performance.now();
-            if (op === '+' && algo === 'column_carry') {
+            if (op === '+' && actualAlgo === 'column_carry') {
                 solveColumnCarry();
-            } else if (op === '*' && algo === 'long_mult') {
+            } else if (op === '*' && actualAlgo === 'long_mult') {
                 solveLongMult();
             } else {
                 backtrack(0);
@@ -965,10 +1243,17 @@
             }
             
             let algoName = "Vét cạn thô (Brute Force)";
-            if (algo === 'column_carry') algoName = "Biến nhớ theo cột (Column-Carry CSP)";
-            if (algo === 'long_mult') algoName = "Nhân dài (Long Multiplication CSP)";
+            if (actualAlgo === 'column_carry') algoName = "Biến nhớ theo cột (Column-Carry CSP)";
+            if (actualAlgo === 'long_mult') algoName = "Nhân dài (Long Multiplication CSP)";
 
-            let html = `<p style="color:var(--success); margin-bottom: 20px;">✓ Chạy bằng <strong>${algoName}</strong>. Tìm thấy ${solutions.length} nghiệm trong ${(endTime - startTime).toFixed(2)}ms</p>`;
+            let methodStr = "";
+            if (algo === 'auto') {
+                methodStr = `Tự động chọn: <strong>${algoName}</strong>`;
+            } else {
+                methodStr = `Giải thuật: <strong>${algoName}</strong>`;
+            }
+
+            let html = `<p style="color:var(--success); margin-bottom: 20px;">✓ ${methodStr}. Tìm thấy ${solutions.length} nghiệm trong ${(endTime - startTime).toFixed(2)}ms</p>`;
             
             solutions.forEach((sol, index) => {
                 let numW1 = w1.split('').map(c => sol[c]).join('');
